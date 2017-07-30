@@ -140,6 +140,7 @@ Requested Scope | Meaning
 ------|---------|-------------------
 `launch/patient` | Need patient context at launch time (FHIR Patient resource)
 `launch/encounter` | Need encounter context at launch time (FHIR Encounter resource)
+`launch/location` | Need location context at launch time (FHIR Location resource)
 (Others)| This list can be extended by any SMART EHR if additional context is required.
 
 ### Launch context arrives with your `access_token`
@@ -165,6 +166,7 @@ Launch context parameter | Example value | Meaning
 ------|---------|-------------------
 `patient` | `"123"`| String value with a patient id, indicating that the app was launched in the context of FHIR Patient 123. If the app has any patient-level scopes, they will be scoped to Patient 123.
 `encounter` | `"123"`| String value with an encounter id, indicating that the app was launched in the context of FHIR Encounter 123.
+`location` | `"123"`| String value with a location id, indicating that the app app was launched from the phyical place corresponding to FHIR Location 123.
 `need_patient_banner` | `true` or `false` (boolean) | Boolean value indicating whether the app was launched in a UX context where a patient banner is required (when `true`) or not required (when `false`). An app receiving a value of `false` should not take up screen real estate displaying a patient banner.
 `resource` | `"MedicationPrescription/123"`| String value with a relative resource link, describing some specific resource context for the (in this case, a particular medication prescription). This is a generic mechanism to communicate to an app that a particular resource is "of interest" at launch time.
 `intent` | `"reconcile-medications"`| String value describing the intent of the application launch (see notes [below](#launch-intent))
@@ -256,12 +258,32 @@ by requesting a pair of OpenID Connect scopes: `openid` and  `profile`.
 
 When these scopes are requested (and the request is granted), the app will
 receive an [`id_token`](http://openid.net/specs/openid-connect-core-1_0.html#CodeIDToken)
-that comes alongside the access token.
+that comes alongside the access token. The `id_token` contains, at minimum, the `iss`, 
+`sub`, `aud`, `exp`, `iat` claims (see below).
 
-This token must be [validated according to the OIDC specification](http://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation).
-To learn more about the user, the app should treat the "profile" claim as the URL of
-a FHIR resource representing the current user. This will be a resource of type
-`Patient`, `Practitioner`, or `RelatedPerson`.
+This token must be [validated according to the OIDC specification](http://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation). 
+In the case where the JWS alg is "none", the app must reject any claims 
+where the issuer is different from the url of the authorization server. The 
+`openid` scope causes the `id_token` to be returned and the `profile` scope 
+includes the `fhirUser` claim within the `id_token`'s JWT.
+To learn more about the user, the app should treat the "fhirUser" claim as the URL of
+a FHIR resource representing the current user. This will be a FHIR 
+resource that best represents the current user of type
+`Patient`, `Practitioner`, `RelatedPerson` or `Person`. Further, when an 
+app is granted the profile scope, it's `access_token` can be used to access the FHIR resource
+specified in the `fhirUser` claim. 
+
+The body of the `id_token` should contain:
+
+iss, sub, aud, exp, iat
+
+Data in the `id_token` JWT body | Example value | Meaning
+------|---------|-------------------
+`iss`|https:// |e URL using the https scheme that contains scheme, host, and optionally, port number and path components and no query or fragment components.
+`sub`|ivetter|Unique identifier for the current user at the Issuer.
+`aud`|app-client-id|The OAuth 2.0 client_id of the app. This could either be a single value or an array containing multiple identifiers.
+`exp`|1311281970|After this expiration time the ID Token should not be used represented as number of seconds (from 1970-01-01T0:0:0Z in UTC). 
+`iat`|1311280970|Time at which the JWT was issued represented as number of seconds (from 1970-01-01T0:0:0Z in UTC). 
 
 ## Scopes for requesting a refresh token
 
